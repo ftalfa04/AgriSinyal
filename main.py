@@ -1,3 +1,11 @@
+from flask import Flask
+from flask_cors import CORS
+
+app = Flask(__name__)
+CORS(app)
+
+# ... diğer kodlar
+
 import ccxt
 import pandas as pd
 import numpy as np
