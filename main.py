@@ -1,19 +1,22 @@
-from flask import Flask
-from flask_cors import CORS
-
-app = Flask(__name__)
-CORS(app)
-
-# ... diğer kodlar
-
 import ccxt
 import pandas as pd
 import numpy as np
 import time
-from openpyxl import load_workbook
-from openpyxl.styles import PatternFill
 from datetime import datetime
+import requests
 
+# --- Telegram Bildirim Fonksiyonu ---
+def send_telegram_message(message):
+    token = "8450222189:AAF8MvaUT-axEsDBsNwjo89jHCx414JAczA"
+    chat_id = "-4894918800"
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": message}
+    try:
+        requests.post(url, data=payload)
+    except Exception as e:
+        print(f"Telegram gönderim hatası: {e}")
+
+# --- Hacim formatlama fonksiyonu ---
 def format_volume(vol):
     if vol >= 1_000_000:
         return f"{vol / 1_000_000:.2f}M"
@@ -22,6 +25,7 @@ def format_volume(vol):
     else:
         return str(round(vol, 2))
 
+# --- QQE hesaplama ---
 def calculate_qqe(df, rsi_length=14, smoothing_factor=5):
     delta = df['close'].diff()
     gain = np.where(delta > 0, delta, 0)
@@ -55,6 +59,7 @@ def calculate_qqe(df, rsi_length=14, smoothing_factor=5):
             qqes[i] = qqes[i-1]
     return qqef, qqes
 
+# --- Sinyal kontrol ---
 def check_signals(qqef, qqes):
     signal = "NO SIGNAL"
     for i in range(-2, 0):
@@ -64,6 +69,7 @@ def check_signals(qqef, qqes):
             return "SELL"
     return signal
 
+# --- Ana fonksiyon ---
 def main():
     print("QQE sinyal taraması başladı...")
     exchange = ccxt.binance()
@@ -72,8 +78,6 @@ def main():
 
     markets = exchange.load_markets()
     symbols = [s for s in markets if s.endswith('/USDT') and len(s.split('/')) == 2]
-
-    results = []
 
     for idx, symbol in enumerate(symbols, 1):
         print(f"{idx}. {symbol} taranıyor...")
@@ -90,43 +94,13 @@ def main():
             volume_24h = format_volume(raw_volume)
 
             if signal in ['BUY', 'SELL']:
-                results.append({
-                    "Sembol": symbol,
-                    "Sinyal": signal,
-                    "24h Hacim (USDT)": volume_24h
-                })
+                message = f"{symbol} için {signal} sinyali geldi!\n24h Hacim: {volume_24h}"
+                send_telegram_message(message)
 
             time.sleep(0.2)
 
         except Exception as e:
             print(f"{symbol}: Hata - {e}")
-
-    # Excel yazımı
-    if results:
-        df_results = pd.DataFrame(results)
-        now = datetime.now().strftime("%d.%m.%Y - %H.%M")
-        filename = f"qqe_sinyal_{now}.xlsx"
-        df_results.to_excel(filename, index=False)
-
-        wb = load_workbook(filename)
-        ws = wb.active
-
-        green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-        red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-
-        for row in range(2, ws.max_row + 1):
-            signal_cell = ws[f"B{row}"]
-            if signal_cell.value == "BUY":
-                for col in ['A', 'B', 'C']:
-                    ws[f"{col}{row}"].fill = green_fill
-            elif signal_cell.value == "SELL":
-                for col in ['A', 'B', 'C']:
-                    ws[f"{col}{row}"].fill = red_fill
-
-        wb.save(filename)
-        print(f"\nSinyaller başarıyla kaydedildi: {filename}")
-    else:
-        print("Sinyal bulunamadı.")
 
 if __name__ == "__main__":
     main()
