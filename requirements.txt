@@ -1,4 +1,5 @@
-ccxt
-pandas
-numpy
-openpyxl
+requests
+pandas as pd
+time
+datetime
+numpy as np
